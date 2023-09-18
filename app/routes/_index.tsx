@@ -1,4 +1,15 @@
-import type { MetaFunction } from "@remix-run/node";
+import { useForm } from "@conform-to/react";
+import { parse } from "@conform-to/zod";
+import {
+  json,
+  type ActionFunctionArgs,
+  type MetaFunction,
+  redirect,
+} from "@remix-run/node";
+import { Form, useActionData } from "@remix-run/react";
+import * as PostSchemas from "~/schemas/post";
+import { Effect } from "effect";
+import * as Post from "~/domain/post.server";
 
 export const meta: MetaFunction = () => {
   return [
@@ -7,35 +18,61 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+export async function action({ request }: ActionFunctionArgs) {
+  /*const formData = await request.formData();
+  console.log(formData);
+
+  const submission = parse(formData, { schema: PostSchemas.Post });
+
+  console.log(submission);
+
+  if (!submission.value || submission.intent !== "submit") {
+    return json(submission);
+  }
+
+  return redirect("/");*/
+  const program = Effect.gen(function* ($) {
+    const formData = yield* $(Post.formData(request));
+    const parsedData = yield* $(Post.parseData(formData, PostSchemas.Post));
+    return parsedData;
+  });
+  return Effect.runPromise(
+    Effect.match(program, {
+      onSuccess: (value) => value,
+      onFailure: (error) => {
+        if (error._tag === "ValidationError") {
+          return json(error.submission);
+        } else {
+          return json({}, { status: 500 });
+        }
+      },
+    })
+  );
+}
+
 export default function Index() {
+  const lastSubmission = useActionData<typeof action>();
+  const [form, { title, lead }] = useForm({
+    lastSubmission,
+    onValidate({ formData }) {
+      return parse(formData, { schema: PostSchemas.Post });
+    },
+  });
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
-      <h1>Welcome to Remix</h1>
-      <ul>
-        <li>
-          <a
-            target="_blank"
-            href="https://remix.run/tutorials/blog"
-            rel="noreferrer"
-          >
-            15m Quickstart Blog Tutorial
-          </a>
-        </li>
-        <li>
-          <a
-            target="_blank"
-            href="https://remix.run/tutorials/jokes"
-            rel="noreferrer"
-          >
-            Deep Dive Jokes App Tutorial
-          </a>
-        </li>
-        <li>
-          <a target="_blank" href="https://remix.run/docs" rel="noreferrer">
-            Remix Docs
-          </a>
-        </li>
-      </ul>
+      <Form method="post" {...form.props}>
+        <div>
+          <label>Title</label>
+          <input name={title.name} />
+          <div>{title.error}</div>
+        </div>
+        <div>
+          <label>Lead</label>
+          <textarea name={lead.name} />
+          <div>{lead.error}</div>
+        </div>
+        <button>Post</button>
+      </Form>
     </div>
   );
 }
