@@ -4,7 +4,6 @@ import {
   json,
   type ActionFunctionArgs,
   type MetaFunction,
-  redirect,
 } from "@remix-run/node";
 import { Form, useActionData } from "@remix-run/react";
 import * as PostSchemas from "~/schemas/post";
@@ -19,18 +18,18 @@ export const meta: MetaFunction = () => {
 };
 
 export async function action({ request }: ActionFunctionArgs) {
-  /*const formData = await request.formData();
-  console.log(formData);
+  // const formData = await request.formData();
+  // console.log(formData);
 
-  const submission = parse(formData, { schema: PostSchemas.Post });
+  // const submission = parse(formData, { schema: PostSchemas.Post });
 
-  console.log(submission);
+  // console.log(submission);
 
-  if (!submission.value || submission.intent !== "submit") {
-    return json(submission);
-  }
+  // if (!submission.value || submission.intent !== "submit") {
+  //   return json(submission);
+  // }
 
-  return redirect("/");*/
+  // return redirect("/");
   const program = Effect.gen(function* ($) {
     const formData = yield* $(Post.formData(request));
     const parsedData = yield* $(Post.parseData(formData, PostSchemas.Post));
@@ -38,13 +37,17 @@ export async function action({ request }: ActionFunctionArgs) {
   });
   return Effect.runPromise(
     Effect.match(program, {
-      onSuccess: (value) => value,
+      onSuccess: (value) => json(value),
       onFailure: (error) => {
-        if (error._tag === "ValidationError") {
-          return json(error.submission);
-        } else {
-          return json({}, { status: 500 });
+        switch (error._tag) {
+          case "ValidationError":
+            return json(error.submission);
         }
+        return json({
+          intent: "submitError",
+          payload: { status: 500, message: "Internal Server Error" },
+          error: { messages: ["Internal Server Error"] },
+        });
       },
     })
   );
